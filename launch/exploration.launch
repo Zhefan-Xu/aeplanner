@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+        <node name="drone_exploration" pkg="aeplanner" type="aeplanner_exploration"/>
+        <!-- <node name="drone_controller" pkg="rh_nbv" type="controller.py" /> -->
+        <!-- Launch navigation server -->
+
+</launch>
