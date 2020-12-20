@@ -37,11 +37,12 @@ std::vector<Node*> planner(OcTree& tree,
 						  double& best_IG,
 						  std::vector<geometry_msgs::Point> &tree_vis_array,
 						  KDTree* t,
+						  KDTree* cache, 
 						  bool write_result = false){
 	// Intialize 
 	std::vector<Node*> best_branch;
 	// Grow RRT Tree
-	KDTree* new_t = growRRT(tree, start, num_sample, max_sample, eps, best_IG,  tree_vis_array, t, write_result);
+	KDTree* new_t = growRRT(tree, start, num_sample, max_sample, eps, best_IG,  tree_vis_array, t, cache,  write_result);
 	// Extract the best branch
 	if (new_t == NULL){
 		return best_branch;

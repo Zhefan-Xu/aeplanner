@@ -62,6 +62,10 @@ double total_computation_time = 0;
 double total_path_length = 0;
 
 
+// AEP parameter:
+bool init_cache = true; // If true, we initialize the cache
+KDTree* cache;
+
 // Give the longest length of the best branch
 int max_length = 5;
 
@@ -79,7 +83,7 @@ double last_size_increment = 100;
 double last_two_size_increment = 100;
 double last_best_ig = 0;
 
-std::ofstream output_file("/home/zhefan/Desktop/aeplanner_result/result.txt");
+// std::ofstream output_file("/home/zhefan/Desktop/aeplanner_result/result.txt");
 // =======================================END================================================
 
 
@@ -110,6 +114,11 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 	
 	tree_ptr->setResolution(RES);
 	
+	// Initialize Cache if it is not initialized:
+	if (init_cache){
+		cache = new KDTree();
+		init_cache = false;
+	}
 
 	// Get the current state:
 	current_x = odom->pose.pose.position.x;
@@ -181,7 +190,12 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		// Call Planner
 		best_IG = 0;
 		
-		branch = planner(*tree_ptr, start, num_sample, max_sample, eps, best_IG, tree_vis_array, t, false);
+		branch = planner(*tree_ptr, start, num_sample, max_sample, eps, best_IG, tree_vis_array, t, cache, false);
+		
+		// AEP: Autonomous Exploration Planner
+		// If the branch is not good enough (How to define???), then we navigate to the point in cache
+
+
 		auto stop_time = high_resolution_clock::now();
 		auto duration = duration_cast<microseconds>(stop_time - start_time);
 		total_path_length += eps;

@@ -1,3 +1,4 @@
+#include <Eigen/Dense>
 #include <aeplanner/kdtree.h>
 #include <aeplanner/utils.h>
 #include <random>
@@ -8,22 +9,23 @@
 #include <fstream>
 #include <set>
 using namespace std::chrono; 
+using namespace Eigen;
 
 // PARAMETER
 double lambda = 0.5;
 
-// cafe
-double env_x_min = -4.5;
-double env_x_max = 4.5;
-double env_y_min = -11;
-double env_y_max = 7;
-double env_z_min = 0;
-double env_z_max = 2.5;
+// // cafe
+// double env_x_min = -4.5;
+// double env_x_max = 4.5;
+// double env_y_min = -11;
+// double env_y_max = 7;
+// double env_z_min = 0;
+// double env_z_max = 2.5;
 
-// Define Drone Size:
-double DRONE_X = 0.5;
-double DRONE_Y = 0.5;
-double DRONE_Z = 0.1;
+// // Define Drone Size:
+// double DRONE_X = 0.5;
+// double DRONE_Y = 0.5;
+// double DRONE_Z = 0.1;
 
 // // Maze
 // double env_x_min = -15;
@@ -86,19 +88,19 @@ double DRONE_Z = 0.1;
 // double DRONE_Y = 0.1;
 // double DRONE_Z = 0.1;
 
-// // storage_room field
-// double env_x_min = -100;
-// double env_x_max = 100;
-// double env_y_min = -100;
-// double env_y_max = 100;
-// double env_z_min = 0.2;
-// double env_z_max = 10;
+// storage_room field
+double env_x_min = -100;
+double env_x_max = 100;
+double env_y_min = -100;
+double env_y_max = 100;
+double env_z_min = 0.2;
+double env_z_max = 10;
 
 
-// // Define Drone Size:
-// double DRONE_X = 0.1;
-// double DRONE_Y = 0.1;
-// double DRONE_Z = 0.1;
+// Define Drone Size:
+double DRONE_X = 0.1;
+double DRONE_Y = 0.1;
+double DRONE_Z = 0.1;
 
 // MAP RESOLUTION:
 double RES = 0.2;
@@ -303,6 +305,49 @@ int calculateUnknown(const OcTree& tree, Node* n){
 	return count;
 }
 
+void gainEstimator(Node* query_node, std::vector<Node*> knn, double& mean, double& variance){
+	// Kernel: k(xi, xj) = exp(-0.5 * |xi- xj|^2)
+	int num_nodes = knn.size();
+
+	// Calculate K matrix (covariance matrix)
+	MatrixXf K (num_nodes, num_nodes);
+	for (int i=0; i<num_nodes; ++i){
+		for (int j=0; j<num_nodes; ++j){
+			double node_distance = knn[i]->p.distance(knn[j]->p);
+			double kij = exp(-0.5 * pow(node_distance, 2));
+			K(i, j) = kij;
+		}
+	}
+	// cout << K << endl;
+
+	// Compute Cholesky Decomposition:
+	MatrixXf L = K.llt().matrixL();
+	// cout << L << endl;
+	// cout << L * L.transpose() << endl;
+
+	// Calculate mean
+	// First get the gain value as a vector and calculate k star
+	VectorXf g (num_nodes);
+	VectorXf ks (num_nodes);
+	for (int i=0; i<num_nodes; ++i){
+		g(i) = knn[i]->num_unknown;
+		double query_node_distance = query_node->p.distance(knn[i]->p);
+		double ksi = exp(-0.5 * pow(query_node_distance, 2));
+		ks(i) = ksi;
+	}
+	VectorXf alpha = (L.transpose().inverse()) * (L.inverse() * g);
+	
+	mean = ks.transpose() * alpha;
+	// cout << g << endl;
+	// cout << mean << endl;
+
+	// Calculate vairance:
+	VectorXf v = L.inverse() * ks;
+	double kss = exp(-0.5 * 0);
+	variance = kss - v.transpose() * v;
+	cout << "mean: " << mean << " ,variance: " << variance << endl;
+}
+
 // Main Function
 KDTree* growRRT(OcTree& tree,
 			 Node* start,
@@ -312,6 +357,7 @@ KDTree* growRRT(OcTree& tree,
 			 double &best_IG,
 			 std::vector<geometry_msgs::Point> &tree_vis_array,
 			 KDTree* t = NULL,
+			 KDTree* cache = NULL,
 			 bool write_results = false
 			){
 	std::ofstream file;
@@ -355,11 +401,39 @@ KDTree* growRRT(OcTree& tree,
 			point_rand.z = q_rand->p.z();
 			tree_vis_array.push_back(point_near);
 			tree_vis_array.push_back(point_rand);
+
+			// AEP: Autonomous Exploration Planner: 
 			// Calculate Information Gain Visible
-			// TODO: function for calculating information gain
+			// Check whether the point can be found on cache (Gaussian Process Approximator)
+			// Since it is too expensive to do GP over the whole data, only N nearest points are used to approximate (I think it is a reasonable approximation)
+			int num_nn_nodes = 5;
+			int alpha = 5;
+			int cache_size = cache->getSize();
+			double mean = -1;
+			double variance = -1;
+			if (cache_size > alpha * num_nn_nodes){
+				// Search N nearest neighbor nodes:
+				std::vector<Node*> knn = t->kNearestNeighbor(q_rand, num_nn_nodes);
+				// print_node_vector(knn);
+				// cout << "===============" << endl;
+				gainEstimator(q_rand, knn, mean, variance);
+				// cout << knn.size() << endl;
+
+			}
+
+			// Need to copy q_rand, since it is a pointer also used in tree structure (I cannot directly use it)
+			Node* q_rand_copy = new Node(q_rand->p, q_rand->yaw);
+			// q_rand_copy->p = q_rand->p;
+			// q_rand_copy->yaw = q_rand->yaw;
+			q_rand_copy->num_unknown = q_rand->num_unknown;
+			cache->insert(q_rand_copy);
+
+
+			// If we fail to find a good GP estimator, we explicitly calculate it and add it to GP approximator
+			// function for calculating information gain
 			// calculate unknown
 			int num_unknown = calculateUnknown(tree, q_rand);
-
+			cout << num_unknown << endl;
 
 			double IG = exp(-lambda*(q_near->dis)) * num_unknown;
 			q_rand->ig = q_near->ig + IG;

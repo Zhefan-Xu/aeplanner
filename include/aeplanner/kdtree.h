@@ -50,6 +50,7 @@ public:
 					      Node* best_node,
 						  double least_distance,
 						  int depth); // return pointer to the nearest neighbor
+	std::vector<Node*> kNearestNeighbor(Node* n, int num);
 	void setBest(Node* n);
 	Node* getBest();
 	void setBestSc(Node* n);
@@ -265,6 +266,24 @@ Node* KDTree::nearestNeighbor(Node* n,
 		least_distance_nn = 1000000;
 	}
 	return best_node;
+}
+
+// Returns the k-nearest neighbor in ascending order
+std::vector<Node*> KDTree::kNearestNeighbor(Node* n, int num){
+	std::vector<Node*> knn;
+	// cout << "================start================" <<endl;
+	for (int i=0; i<num; ++i){
+		// cout << "====================" << i << "=========================" << endl;
+		Node* nearest_neighbor = nearestNeighbor(n);
+		knn.push_back(nearest_neighbor);
+		this->not_target.push_back(nearest_neighbor);
+		// cout << n->p.distance(nearest_neighbor->p) << endl;
+		// cout << "================================================" << endl;
+	}
+	// cout << "================end================" <<endl;
+	// std::reverse(knn.begin(), knn.end());
+	this->not_target.clear();
+	return knn;
 }
 
 void KDTree::setBest(Node* n){

@@ -28,12 +28,14 @@ void test_rrt(OcTree& tree){
 	std::vector<geometry_msgs::Point> tree_vis_array;
 	// KDTree* t = growRRT(tree, start, 100, 200,0.5,  best_IG, tree_vis_array);
 	KDTree* t_ = new KDTree();
-	KDTree* t = growRRT(tree, start, 500, 1000,0.5,  best_IG, tree_vis_array, t_, true);
+	KDTree* cache = new KDTree();
+	KDTree* t = growRRT(tree, start, 500, 1000,0.5,  best_IG, tree_vis_array, t_, cache, true);
 	Node* start2 = randomConfig(tree);
 	double best_IG2 = 0;
 	std::vector<geometry_msgs::Point> tree_vis_array2;
 	KDTree* t2_ = new KDTree();
-	KDTree* t2 = growRRT(tree, start2, 500, 1000,0.5,  best_IG2, tree_vis_array2, t2_, true);
+	KDTree* cache2 = new KDTree();
+	KDTree* t2 = growRRT(tree, start2, 500, 1000,0.5,  best_IG2, tree_vis_array2, t2_, cache, true);
 	cout << "Finish" << endl;
 	cout << "===================================" << endl;
 }
