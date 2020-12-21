@@ -38,6 +38,7 @@ void print_node(Node n){
 	print_point3d(n.p);
 	cout << " yaw: " << n.yaw << "                    "<<  endl;
 	cout << " Info Gain: " << n.ig << "             " << endl;
+	cout << " Num Unknown: " << n.num_unknown << endl;
 	cout << "+------------------------------+" << endl;
 }
 

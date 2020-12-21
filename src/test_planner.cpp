@@ -12,7 +12,9 @@ void test_planner(OcTree& tree){
 	double best_IG = 0;
 	std::vector<geometry_msgs::Point> tree_vis_array;
 	KDTree* cache = new KDTree();
-	std::vector<Node*> best_branch = planner(tree, start, num_sample, max_sample, eps, best_IG, tree_vis_array, t, cache);
+	std::priority_queue<Node*, std::vector<Node*>, GainCompareNode> cache_queue;
+	bool frontier_exploration = false;
+	std::vector<Node*> best_branch = planner(tree, start, num_sample, max_sample, eps, best_IG, tree_vis_array, t, cache, frontier_exploration,cache_queue);
 	print_node_vector(best_branch);
 	// cout << "RRT vis array size: " << tree_vis_array.size() << endl;
 	// t->clear();

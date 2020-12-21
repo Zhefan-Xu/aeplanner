@@ -3,6 +3,7 @@
 #include <octomap/octomap.h>
 #include <algorithm>
 #include <stdlib.h>
+#include <queue>
 using namespace octomap;
 using std::cout; using std::endl;
 
@@ -18,6 +19,7 @@ typedef struct Node{
 	struct Node* parent; // Parent Node For RRT Backtracking
 	struct Node* left;   // kd-tree left
 	struct Node* right;  // kd-tree right
+	Node (){}
 	Node(point3d _p, double _yaw){
 		p = _p;
 		yaw = _yaw;
@@ -27,7 +29,21 @@ typedef struct Node{
 		left = NULL;
 		right = NULL;
 	}
+	Node(point3d _p){
+		p = _p;
+		dis = 0;
+		parent = NULL;
+		left = NULL;
+		right = NULL;
+	}
 } Node;
+
+
+struct GainCompareNode{
+	bool operator()(Node* n1, Node* n2){
+		return n1->num_unknown < n2->num_unknown;
+	}
+};
 
 //======================================================================
 
@@ -40,6 +56,7 @@ private:
 	std::vector<Node*> not_target;
 	Node* best; // Highest info gain
 	Node* best_sc; // Best Node for shortcut
+
 public:
 	KDTree();
 	Node* getRoot();

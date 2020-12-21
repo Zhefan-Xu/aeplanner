@@ -5,7 +5,7 @@ from geometry_msgs.msg import Pose, Twist
 from nav_msgs.msg import Path
 import message_filters 
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
-from rh_nbv.msg import Goal
+from aeplanner.msg import Goal
 
 target_model_name = "drone"
 eps = 1e-6

@@ -29,8 +29,8 @@ std::ofstream replan_data;
 
 // ==========================================================================================
 // double res = 0.1;
-// int num_sample =1000, max_sample = 5000;
-int num_sample = 800, max_sample = 2000;
+int num_sample =200, max_sample = 1000;
+// int num_sample = 800, max_sample = 2000;
 int count_low_info_gain = 0;
 double linear_velocity = 0.3;
 double eps = 1.0;
@@ -40,6 +40,7 @@ AbstractOcTree* abtree;
 float current_x, current_y, current_z, current_ox, current_oy, current_oz, current_ow,
 	  goal_x, goal_y, goal_z, eps_x, eps_y, eps_z, eps_yaw, eps_q1, eps_q2, eps_q3, eps_q4;
 point3d goal_position (-1000, -1000, -1000);
+point3d last_position (-1000, -1000, -1000);
 point3d first_time = goal_position;
 double yaw = 0;
 double last_yaw = 0;
@@ -65,6 +66,7 @@ double total_path_length = 0;
 // AEP parameter:
 bool init_cache = true; // If true, we initialize the cache
 KDTree* cache;
+std::priority_queue<Node*, std::vector<Node*>, GainCompareNode> cache_queue;
 
 // Give the longest length of the best branch
 int max_length = 5;
@@ -117,6 +119,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 	// Initialize Cache if it is not initialized:
 	if (init_cache){
 		cache = new KDTree();
+
 		init_cache = false;
 	}
 
@@ -154,7 +157,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 
 	bool reach = eps_x < 0.2 and eps_y < 0.2 and eps_z < 0.2 and ((eps_yaw < 0.1) or (std::abs(eps_yaw-2*pi) < 0.1));
 	if (reach or goal_position == first_time){
-		
+		bool frontier_exploration = false;
 		cout << "=========================" << count_path_segment << "=========================" << endl;
 		++count_path_segment;
 		auto start_time = high_resolution_clock::now();
@@ -162,19 +165,34 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		// Initialize Start Node and Tree
 		Node* start = new Node(point3d(current_x, current_y, current_z), 0); // Yaw doesn't matter
 		KDTree* t = new KDTree();
+		if (not frontier_exploration){
+		
 		// Insert previous best branch
-		for (int i=1; i<branch.size(); ++i){
-			if (i == branch.size()-1){
-				t->setBest(branch[i]);
+			for (int i=1; i<branch.size(); ++i){
+				if (i == branch.size()-1){
+					t->setBest(branch[i]);
+				}
+				if (i == 1){
+					branch[i]->parent = NULL;
+					// branch[i]->ig = 0; 
+				}
+				else{
+					double yaw = 0;
+					branch[i]->ig = branch[i-1]->ig + exp(-lambda*eps) * calculateUnknown(*tree_ptr, branch[i], yaw);
+				}
+				t->insert(branch[i]);
+				// geometry_msgs::Point prev_point, current_point;
+				// prev_point.x = branch[i-1]->p.x();
+				// prev_point.y = branch[i-1]->p.y();
+				// prev_point.z = branch[i-1]->p.z();
+				// current_point.x = branch[i]->p.x();
+				// current_point.y = branch[i]->p.y();
+				// current_point.z = branch[i]->p.z();
+				// tree_vis_array.push_back(prev_point);
+				// tree_vis_array.push_back(current_point);
 			}
-			if (i == 1){
-				branch[i]->parent = NULL;
-				// branch[i]->ig = 0; 
-			}
-			else{
-				branch[i]->ig = branch[i-1]->ig + exp(-lambda*eps) * calculateUnknown(*tree_ptr, branch[i]);
-			}
-			t->insert(branch[i]);
+		}
+		for (int i =1; i<branch.size(); ++i){
 			geometry_msgs::Point prev_point, current_point;
 			prev_point.x = branch[i-1]->p.x();
 			prev_point.y = branch[i-1]->p.y();
@@ -185,17 +203,17 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 			tree_vis_array.push_back(prev_point);
 			tree_vis_array.push_back(current_point);
 		}
-
 		
 		// Call Planner
 		best_IG = 0;
-		
-		branch = planner(*tree_ptr, start, num_sample, max_sample, eps, best_IG, tree_vis_array, t, cache, false);
-		
+
+
 		// AEP: Autonomous Exploration Planner
 		// If the branch is not good enough (How to define???), then we navigate to the point in cache
-
-
+		
+		branch = planner(*tree_ptr, start, num_sample, max_sample, eps, best_IG, tree_vis_array, t, cache, frontier_exploration, cache_queue, false);
+		
+		
 		auto stop_time = high_resolution_clock::now();
 		auto duration = duration_cast<microseconds>(stop_time - start_time);
 		total_path_length += eps;
@@ -226,23 +244,23 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 			count_low_info_gain = 0;
 		}
 
-		double volume = 0;
-		for (OcTree::leaf_iterator it=tree_ptr->begin_leafs(), end=tree_ptr->end_leafs(); it != end; ++it){
-				double leaf_size = it.getSize();
-				volume += leaf_size * leaf_size * leaf_size;
-		}
-		cout << "Volume: " << volume << endl;
-		if (count_low_info_gain >= 5){
-			cout << "Terminates" << endl;
-			double volume = 0;
-			for (OcTree::leaf_iterator it=tree_ptr->begin_leafs(), end=tree_ptr->end_leafs(); it != end; ++it){
-				double leaf_size = it.getSize();
-				volume += leaf_size * leaf_size * leaf_size;
-			}
-			cout << "Volume: " << volume << endl;
-			ros::shutdown();
-			return;
-		}
+		// double volume = 0;
+		// for (OcTree::leaf_iterator it=tree_ptr->begin_leafs(), end=tree_ptr->end_leafs(); it != end; ++it){
+		// 		double leaf_size = it.getSize();
+		// 		volume += leaf_size * leaf_size * leaf_size;
+		// }
+		// cout << "Volume: " << volume << endl;
+		// if (count_low_info_gain >= 5){
+		// 	cout << "Terminates" << endl;
+		// 	double volume = 0;
+		// 	for (OcTree::leaf_iterator it=tree_ptr->begin_leafs(), end=tree_ptr->end_leafs(); it != end; ++it){
+		// 		double leaf_size = it.getSize();
+		// 		volume += leaf_size * leaf_size * leaf_size;
+		// 	}
+		// 	cout << "Volume: " << volume << endl;
+		// 	ros::shutdown();
+		// 	return;
+		// }
 		// if (branch.size() == 0){ 
 		// 	auto stop_time_total = high_resolution_clock::now();
 		// 	auto duration_total = duration_cast<microseconds>(stop_time_total - start_time_total);
@@ -265,8 +283,9 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		// cout << "Best INFO GAIN: " << best_IG << endl;
 		// cout << "branch size: " << branch.size() << endl;
 
-		
+		last_position = branch[0]->p;		
 		goal_position = branch[1]->p;
+		double delta_eps = last_position.distance(goal_position);
 		yaw = branch[1]->yaw;
 
 		// get result:
@@ -314,12 +333,12 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		goal.yaw = yaw; 
 		goal.linear_velocity = linear_velocity;
 		if (first_time_entry){
-			double angular_velocity = (yaw-current_yaw)/(eps/linear_velocity);
+			double angular_velocity = (yaw-current_yaw)/(delta_eps/linear_velocity);
 			goal.angular_velocity = angular_velocity;
 			first_time_entry = false;
 		}
 		else{
-			goal.angular_velocity = (yaw-last_yaw)/(eps/linear_velocity);
+			goal.angular_velocity = (yaw-last_yaw)/(delta_eps/linear_velocity);
 		}
 		goal.is_last = true;
 		last_yaw = yaw;

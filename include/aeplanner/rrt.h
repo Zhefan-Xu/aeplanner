@@ -119,9 +119,21 @@ double vertical_max_angle = atan2(1 * tan(FOV/2)/ratio, 1);
 
 
 int step_num = 0;
+#define PI_const 3.1415926
+
+std::vector<double> generate_yaws(int n){
+	std::vector<double> yaws;
+	for (int i=0; i<n; ++i){
+		yaws.push_back(i*2*PI_const/n);
+	}
+	return yaws;
+}
+std::vector<double> yaws = generate_yaws(32);
 
 // Helper Function Write Node info Declare
 void writeNodeInfo(Node* n, std::ofstream &file);
+
+
 
 // Random Generator
 std::random_device rd;
@@ -233,10 +245,10 @@ bool checkCollision(OcTree& tree, Node* n1, Node* n2){
 }
 
 // NEED FIX
-int calculateUnknown(const OcTree& tree, Node* n){
+int calculateUnknown(const OcTree& tree, Node* n, double& yaw){
 	// Position:
 	point3d p = n->p;
-	double yaw = n->yaw;
+	// double yaw = n->yaw;
 	// Possible range
 	double xmin, xmax, ymin, ymax, zmin, zmax, distance;
 	xmin = p.x() - dmax;
@@ -251,6 +263,12 @@ int calculateUnknown(const OcTree& tree, Node* n){
 	point3d pmax (xmax, ymax, zmax);
 	point3d_list node_centers;
 	tree.getUnknownLeafCenters(node_centers, pmin, pmax);
+
+	std::map<double, int> yaw_num_voxels;
+	for (double yaw: yaws){
+		yaw_num_voxels[yaw] = 0;
+	} 
+
 	// cout << "Max horizontal Angle: " << horizontal_max_angle << endl;
 	// cout << "Max Vertical Angle: " << vertical_max_angle << endl;
 	int count = 0;
@@ -272,37 +290,52 @@ int calculateUnknown(const OcTree& tree, Node* n){
 			distance = p.distance(u);
 
 			if (distance >= dmin and distance <= dmax){
-				point3d face (cos(yaw), sin(yaw), 0);
-				// This is not correct but just for convienence:
-				point3d direction = u - p;
-				// divide the direction into horizontal and vertical
-				// horizontal
-				point3d h_direction = direction;
-				h_direction.z() = 0;
-				double horizontal_angle = face.angleTo(h_direction);
-				
-				// vertical 
-				point3d v_direction = direction;
-				v_direction.x() = cos(yaw);
-				v_direction.y() = sin(yaw);
-				double vertical_angle = face.angleTo(v_direction);
+				for (double yaw: yaws){
+					point3d face (cos(yaw), sin(yaw), 0);
+					// This is not correct but just for convienence:
+					point3d direction = u - p;
+					// divide the direction into horizontal and vertical
+					// horizontal
+					point3d h_direction = direction;
+					h_direction.z() = 0;
+					double horizontal_angle = face.angleTo(h_direction);
+					
+					// vertical 
+					point3d v_direction = direction;
+					v_direction.x() = cos(yaw);
+					v_direction.y() = sin(yaw);
+					double vertical_angle = face.angleTo(v_direction);
 
-				// if (abs(horizontal_angle) < horizontal_max_angle and abs(vertical_angle) < vertical_max_angle){
-				double angle = face.angleTo(direction);
-				if (angle <= FOV/2){
-					point3d end;
-					bool cast = tree.castRay(p, direction, end, true, distance);
-					double cast_distance = p.distance(end);
-					// cout << cast << endl;
-					if (cast == false){ // No Occupied was hit
-						++count;
+					// if (abs(horizontal_angle) < horizontal_max_angle and abs(vertical_angle) < vertical_max_angle){
+					double angle = face.angleTo(direction);
+					if (angle <= FOV/2){
+						point3d end;
+						bool cast = tree.castRay(p, direction, end, true, distance);
+						double cast_distance = p.distance(end);
+						// cout << cast << endl;
+						if (cast == false){ // No Occupied was hit
+							// ++count;
+							yaw_num_voxels[yaw] += 1;
+						}
 					}
 				}
 			}
 		}
 	}
 
-	return count;
+	double max_yaw = 0;
+	int max_count = 0;
+	for (double yaw: yaws){
+		int unknown_count = yaw_num_voxels[yaw];
+		if (max_count < unknown_count){
+			max_count = unknown_count;
+			max_yaw = yaw;
+		}
+	}
+	yaw = max_yaw;
+	// n->yaw = max_yaw;
+	// n->num_unknown = max_count;
+	return max_count;
 }
 
 void gainEstimator(Node* query_node, std::vector<Node*> knn, double& mean, double& variance){
@@ -314,7 +347,7 @@ void gainEstimator(Node* query_node, std::vector<Node*> knn, double& mean, doubl
 	for (int i=0; i<num_nodes; ++i){
 		for (int j=0; j<num_nodes; ++j){
 			double node_distance = knn[i]->p.distance(knn[j]->p);
-			double kij = exp(-0.5 * pow(node_distance, 2));
+			double kij = 2500 * exp(-0.5 * pow(node_distance, 2));
 			K(i, j) = kij;
 		}
 	}
@@ -332,7 +365,7 @@ void gainEstimator(Node* query_node, std::vector<Node*> knn, double& mean, doubl
 	for (int i=0; i<num_nodes; ++i){
 		g(i) = knn[i]->num_unknown;
 		double query_node_distance = query_node->p.distance(knn[i]->p);
-		double ksi = exp(-0.5 * pow(query_node_distance, 2));
+		double ksi = 2500 * exp(-0.5 * pow(query_node_distance, 2));
 		ks(i) = ksi;
 	}
 	VectorXf alpha = (L.transpose().inverse()) * (L.inverse() * g);
@@ -343,9 +376,13 @@ void gainEstimator(Node* query_node, std::vector<Node*> knn, double& mean, doubl
 
 	// Calculate vairance:
 	VectorXf v = L.inverse() * ks;
-	double kss = exp(-0.5 * 0);
+	double kss = 2500 * exp(-0.5 * 0);
 	variance = kss - v.transpose() * v;
-	cout << "mean: " << mean << " ,variance: " << variance << endl;
+	if (mean < 0){
+		mean = 0;
+	}
+
+	// cout << "mean: " << mean << " ,variance: " << variance << endl;
 }
 
 // Main Function
@@ -356,6 +393,7 @@ KDTree* growRRT(OcTree& tree,
 			 double eps,
 			 double &best_IG,
 			 std::vector<geometry_msgs::Point> &tree_vis_array,
+			 std::priority_queue<Node*, std::vector<Node*>, GainCompareNode> &cache_queue,
 			 KDTree* t = NULL,
 			 KDTree* cache = NULL,
 			 bool write_results = false
@@ -406,38 +444,54 @@ KDTree* growRRT(OcTree& tree,
 			// Calculate Information Gain Visible
 			// Check whether the point can be found on cache (Gaussian Process Approximator)
 			// Since it is too expensive to do GP over the whole data, only N nearest points are used to approximate (I think it is a reasonable approximation)
-			int num_nn_nodes = 5;
-			int alpha = 5;
+			int num_nn_nodes = 10;
+			int alpha = 1;
 			int cache_size = cache->getSize();
 			double mean = -1;
-			double variance = -1;
+			double variance = 1000000;
+			double dis_thresh = 2;
+			double variance_thresh = 0.2;
 			if (cache_size > alpha * num_nn_nodes){
 				// Search N nearest neighbor nodes:
-				std::vector<Node*> knn = t->kNearestNeighbor(q_rand, num_nn_nodes);
+				// std::vector<Node*> knn = cache->kNearestNeighbor(q_rand, num_nn_nodes);
+
+				// std::vector<Node*> knn_filtered;
+				// // We only keep the nodes that are with r distance
+				// for (Node* nn: knn){
+				// 	double distance_to_nn = nn->p.distance(q_rand->p);
+				// 	if (distance_to_nn < dis_thresh){
+				// 		knn_filtered.push_back(nn);
+				// 	}
+				// }
+
+
 				// print_node_vector(knn);
 				// cout << "===============" << endl;
-				gainEstimator(q_rand, knn, mean, variance);
+				// gainEstimator(q_rand, knn_filtered, mean, variance);
 				// cout << knn.size() << endl;
 
 			}
 
-			// Need to copy q_rand, since it is a pointer also used in tree structure (I cannot directly use it)
-			Node* q_rand_copy = new Node(q_rand->p, q_rand->yaw);
-			// q_rand_copy->p = q_rand->p;
-			// q_rand_copy->yaw = q_rand->yaw;
-			q_rand_copy->num_unknown = q_rand->num_unknown;
-			cache->insert(q_rand_copy);
-
+			double yaw = 0;
+			// If the variance is less than threshold
+			int num_unknown = 0;
+			if (variance < variance_thresh){
+				num_unknown = mean;
+			}
+			else{
+				num_unknown = calculateUnknown(tree, q_rand, yaw);
+			}
 
 			// If we fail to find a good GP estimator, we explicitly calculate it and add it to GP approximator
 			// function for calculating information gain
 			// calculate unknown
-			int num_unknown = calculateUnknown(tree, q_rand);
-			cout << num_unknown << endl;
+			// int num_unknown = calculateUnknown(tree, q_rand);
+			// cout << num_unknown << endl;
 
 			double IG = exp(-lambda*(q_near->dis)) * num_unknown;
 			q_rand->ig = q_near->ig + IG;
 			q_rand->num_unknown = num_unknown;
+			q_rand->yaw = yaw;
 			// For shortcut part:
 			double distance_sc = q_rand->p.distance(start->p);
 			q_rand->sc_gain = num_unknown;
@@ -457,6 +511,14 @@ KDTree* growRRT(OcTree& tree,
 			if (write_results){
 				writeNodeInfo(q_rand, file);
 			}		
+
+			// Need to copy q_rand, since it is a pointer also used in tree structure (I cannot directly use it)
+			if (variance >= variance_thresh){
+				Node* q_rand_copy = new Node(q_rand->p, q_rand->yaw);
+				q_rand_copy->num_unknown = q_rand->num_unknown;
+				cache->insert(q_rand_copy);
+				cache_queue.push(q_rand_copy);
+			}
 		}
 
 		++count;

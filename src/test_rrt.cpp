@@ -16,7 +16,8 @@ void test_random_config(const OcTree& tree){
 void test_calUnknown(const OcTree& tree){
 	cout << "================Test Count Unknown==============" << endl;
 	Node* nptr = randomConfig(tree);
-	int num = calculateUnknown(tree, nptr);
+	double yaw = 0;
+	int num = calculateUnknown(tree, nptr, yaw);
 	cout << "Number of Unknown is: " << num << endl;
 	cout << "================================================" << endl;
 }
@@ -29,13 +30,15 @@ void test_rrt(OcTree& tree){
 	// KDTree* t = growRRT(tree, start, 100, 200,0.5,  best_IG, tree_vis_array);
 	KDTree* t_ = new KDTree();
 	KDTree* cache = new KDTree();
-	KDTree* t = growRRT(tree, start, 500, 1000,0.5,  best_IG, tree_vis_array, t_, cache, true);
+	// bool frontier_exploration = false
+	std::priority_queue<Node*, std::vector<Node*>, GainCompareNode> cache_queue;
+	KDTree* t = growRRT(tree, start, 500, 1000,0.5,  best_IG, tree_vis_array, cache_queue ,t_, cache,true);
 	Node* start2 = randomConfig(tree);
 	double best_IG2 = 0;
 	std::vector<geometry_msgs::Point> tree_vis_array2;
 	KDTree* t2_ = new KDTree();
 	KDTree* cache2 = new KDTree();
-	KDTree* t2 = growRRT(tree, start2, 500, 1000,0.5,  best_IG2, tree_vis_array2, t2_, cache, true);
+	KDTree* t2 = growRRT(tree, start2, 500, 1000,0.5,  best_IG2, tree_vis_array2, cache_queue, t2_, cache, true);
 	cout << "Finish" << endl;
 	cout << "===================================" << endl;
 }
