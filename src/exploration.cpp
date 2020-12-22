@@ -61,6 +61,8 @@ int count_path_segment = 0;
 double total_time = 0;
 double total_computation_time = 0;
 double total_path_length = 0;
+bool frontier_exploration = false;
+int frontier_path_idx = 1;
 
 
 // AEP parameter:
@@ -157,9 +159,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 
 	bool reach = eps_x < 0.2 and eps_y < 0.2 and eps_z < 0.2 and ((eps_yaw < 0.1) or (std::abs(eps_yaw-2*pi) < 0.1));
 	if (reach or goal_position == first_time){
-		bool frontier_exploration = false;
-		cout << "=========================" << count_path_segment << "=========================" << endl;
-		++count_path_segment;
+
 		auto start_time = high_resolution_clock::now();
 		tree_vis_array.clear();
 		// Initialize Start Node and Tree
@@ -210,26 +210,30 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 
 		// AEP: Autonomous Exploration Planner
 		// If the branch is not good enough (How to define???), then we navigate to the point in cache
+		if (frontier_exploration == false){
+			cout << "=========================" << count_path_segment << "=========================" << endl;
+			++count_path_segment;
+			branch = planner(*tree_ptr, start, num_sample, max_sample, eps, best_IG, tree_vis_array, t, cache, frontier_exploration, cache_queue, false);
+			auto stop_time = high_resolution_clock::now();
+			auto duration = duration_cast<microseconds>(stop_time - start_time);
+			total_path_length += eps;
+			cout << "resoltuion: " << tree_ptr->getResolution() << endl;
+			cout << "Computation Time for this iteration: " << duration.count()/1e6 << " seconds" << endl;
+			replan_data << duration.count()/1e6 << endl;
+			total_computation_time += duration.count()/1e6;
+			cout << "Computation time so far: " << total_computation_time << " seconds" <<endl;
+			cout << "Information Gain: " << best_IG << endl;
+			cout << "Path Length: " << total_path_length << endl;
+			double current_tree_size = tree_ptr->size();
+			cout << "Voxel Number: " << current_tree_size << endl;
+			double current_size_increment = current_tree_size - last_tree_size;
+			last_tree_size = current_tree_size;
+			double total_size_increment = current_size_increment + last_size_increment + last_two_size_increment;
+			cout << "Total three times increment: " << total_size_increment << endl;
+			cout << "=========================" << "END" << "=========================" << endl;
+		}
 		
-		branch = planner(*tree_ptr, start, num_sample, max_sample, eps, best_IG, tree_vis_array, t, cache, frontier_exploration, cache_queue, false);
-		
-		
-		auto stop_time = high_resolution_clock::now();
-		auto duration = duration_cast<microseconds>(stop_time - start_time);
-		total_path_length += eps;
-		cout << "resoltuion: " << tree_ptr->getResolution() << endl;
-		cout << "Computation Time for this iteration: " << duration.count()/1e6 << " seconds" << endl;
-		replan_data << duration.count()/1e6 << endl;
-		total_computation_time += duration.count()/1e6;
-		cout << "Computation time so far: " << total_computation_time << " seconds" <<endl;
-		cout << "Information Gain: " << best_IG << endl;
-		cout << "Path Length: " << total_path_length << endl;
-		double current_tree_size = tree_ptr->size();
-		cout << "Voxel Number: " << current_tree_size << endl;
-		double current_size_increment = current_tree_size - last_tree_size;
-		last_tree_size = current_tree_size;
-		double total_size_increment = current_size_increment + last_size_increment + last_two_size_increment;
-		cout << "Total three times increment: " << total_size_increment << endl;
+
 
 		// if (std::abs(total_size_increment) <= 3){
 		// 	cout << "Terminates" << endl;
@@ -273,7 +277,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		// 	ros::shutdown();
 		// 	return;
 		// }
-		cout << "=========================" << "END" << "=========================" << endl;
+		
 
 		// branch = std::vector<Node*>(branch.begin(), branch.begin()+max_length); 
 		// print_node_vector(branch);
@@ -283,10 +287,24 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		// cout << "Best INFO GAIN: " << best_IG << endl;
 		// cout << "branch size: " << branch.size() << endl;
 
-		last_position = branch[0]->p;		
-		goal_position = branch[1]->p;
+		if (frontier_exploration == true){
+
+			last_position = branch[frontier_path_idx-1]->p;
+			goal_position = branch[frontier_path_idx]->p;
+			yaw = branch[frontier_path_idx]->yaw;
+			++frontier_path_idx;
+			if (frontier_path_idx >= branch.size()){
+				frontier_path_idx = 1;
+				frontier_exploration = false;
+			}
+		}
+		else{
+			last_position = branch[0]->p;		
+			goal_position = branch[1]->p;
+			yaw = branch[1]->yaw;
+		}
 		double delta_eps = last_position.distance(goal_position);
-		yaw = branch[1]->yaw;
+		
 
 		// get result:
 		vector<double> results;

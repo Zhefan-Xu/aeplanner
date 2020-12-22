@@ -53,7 +53,7 @@ std::vector<Node*> rrt(geometry_msgs::Point start,
 	while (true){
 		auto stop_time = high_resolution_clock::now();
 		auto duration = duration_cast<microseconds>(stop_time - start_time); 
-		if (duration.count()/1e6 > 2){
+		if (duration.count()/1e6 > 1){
 			cout << "No path!" << endl;
 			return path;
 		}
@@ -100,7 +100,7 @@ std::vector<Node*> rrt(geometry_msgs::Point start,
 		ptr = ptr->parent;
 	}
 	std::reverse(path.begin(), path.end());
-	path = shortCutPath(path, tree);
+	// path = shortCutPath(path, tree);
 	return path;
 }
 

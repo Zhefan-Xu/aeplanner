@@ -98,8 +98,8 @@ double env_z_max = 10;
 
 
 // Define Drone Size:
-double DRONE_X = 0.1;
-double DRONE_Y = 0.1;
+double DRONE_X = 0.3;
+double DRONE_Y = 0.3;
 double DRONE_Z = 0.1;
 
 // MAP RESOLUTION:
@@ -128,7 +128,7 @@ std::vector<double> generate_yaws(int n){
 	}
 	return yaws;
 }
-std::vector<double> yaws = generate_yaws(32);
+std::vector<double> yaws = generate_yaws(8);
 
 // Helper Function Write Node info Declare
 void writeNodeInfo(Node* n, std::ofstream &file);
@@ -245,7 +245,7 @@ bool checkCollision(OcTree& tree, Node* n1, Node* n2){
 }
 
 // NEED FIX
-int calculateUnknown(const OcTree& tree, Node* n, double& yaw){
+int calculateUnknown(const OcTree& tree, Node* n, double& result_yaw){
 	// Position:
 	point3d p = n->p;
 	// double yaw = n->yaw;
@@ -332,7 +332,7 @@ int calculateUnknown(const OcTree& tree, Node* n, double& yaw){
 			max_yaw = yaw;
 		}
 	}
-	yaw = max_yaw;
+	result_yaw = max_yaw;
 	// n->yaw = max_yaw;
 	// n->num_unknown = max_count;
 	return max_count;
