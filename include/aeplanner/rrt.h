@@ -408,6 +408,7 @@ KDTree* growRRT(OcTree& tree,
 	if (t == NULL){
 		t = new KDTree();	
 	}
+	start->parent = NULL;
 	(*t).insert(start);
 	int count = 0;
 	double best_sc_gain = 0;

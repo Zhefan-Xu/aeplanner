@@ -27,10 +27,12 @@ void extractBestBranchSc(KDTree* t, std::vector<Node*>& best_branch){
 	std::reverse(best_branch.begin(), best_branch.end());
 }
 
-int evaluatePath(std::vector<Node*> &best_branch){
+int evaluatePath(OcTree& tree, std::vector<Node*> &best_branch){
 	int total_num_voxels = 0;
 	for (Node* n: best_branch){
-		total_num_voxels += n->num_unknown;
+		double yaw = 0;
+		total_num_voxels += calculateUnknown(tree, n, yaw);
+		n->yaw = yaw;
 	}
 	return total_num_voxels;
 }
@@ -131,15 +133,16 @@ std::vector<Node*> planner(OcTree& tree,
 	// extractBestBranchSc(new_t, best_branch);
 
 
-	double remove_thresh = 0.5;
+	double remove_thresh = 0.8;
 	int num_unknown_reevaluate = 0;
 	Node* high_gain_node;
+	bool success = false;
 	if (cache_queue.size() > 0){
 		// Check validity
-		bool success = false;
+		
 		
 		while (not success){
-			if (cache_queue.size() == 0){
+			if (cache_queue.size() <= 0){
 				break;
 			}
 			high_gain_node = cache_queue.top();
@@ -159,7 +162,11 @@ std::vector<Node*> planner(OcTree& tree,
 	}
 
 
-	int total_num_voxels = evaluatePath(best_branch);
+	if (not success){
+		return best_branch;
+	}
+
+	int total_num_voxels = evaluatePath(tree, best_branch);
 	cout << "Total unknown voxels: " << total_num_voxels << endl;
 
 	int way_points_num = best_branch.size();
@@ -186,6 +193,9 @@ std::vector<Node*> planner(OcTree& tree,
 				n->yaw = yaw;
 			}
 			frontier_exploration = true;
+		}
+		else{
+			cout << "But we cannot find a valid path!" << endl;
 		}
 
 			

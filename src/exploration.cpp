@@ -29,7 +29,7 @@ std::ofstream replan_data;
 
 // ==========================================================================================
 // double res = 0.1;
-int num_sample =200, max_sample = 1000;
+int num_sample =500, max_sample = 1000;
 // int num_sample = 800, max_sample = 2000;
 int count_low_info_gain = 0;
 double linear_velocity = 0.3;
@@ -63,6 +63,7 @@ double total_computation_time = 0;
 double total_path_length = 0;
 bool frontier_exploration = false;
 int frontier_path_idx = 1;
+bool last_frontier_exploration = false;
 
 
 // AEP parameter:
@@ -165,9 +166,9 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 		// Initialize Start Node and Tree
 		Node* start = new Node(point3d(current_x, current_y, current_z), 0); // Yaw doesn't matter
 		KDTree* t = new KDTree();
-		if (not frontier_exploration){
+		if (not last_frontier_exploration){
 		
-		// Insert previous best branch
+			// Insert previous best branch
 			for (int i=1; i<branch.size(); ++i){
 				if (i == branch.size()-1){
 					t->setBest(branch[i]);
@@ -179,6 +180,7 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 				else{
 					double yaw = 0;
 					branch[i]->ig = branch[i-1]->ig + exp(-lambda*eps) * calculateUnknown(*tree_ptr, branch[i], yaw);
+					branch[i]->yaw = yaw;
 				}
 				t->insert(branch[i]);
 				// geometry_msgs::Point prev_point, current_point;
@@ -297,11 +299,13 @@ void callback(const nav_msgs::OdometryConstPtr& odom, const octomap_msgs::Octoma
 				frontier_path_idx = 1;
 				frontier_exploration = false;
 			}
+			last_frontier_exploration = true;
 		}
 		else{
 			last_position = branch[0]->p;		
 			goal_position = branch[1]->p;
 			yaw = branch[1]->yaw;
+			last_frontier_exploration = false;
 		}
 		double delta_eps = last_position.distance(goal_position);
 		
@@ -447,14 +451,15 @@ int main(int argc, char** argv){
 	// replan_data.open("/home/zhefan/Desktop/Replan_Data_New/aeplanner/replan_data1.txt");
 	while (ros::ok()){
 		goal_pub.publish(goal);
-		// std::ofstream data;
+		std::ofstream data;
 		// data.open("/home/zhefan/Desktop/Experiment_Stats/apartment/aeplanner/apartment_stats5.txt");
-		// auto stop_time_total = high_resolution_clock::now();
-		// auto total_duration = duration_cast<microseconds>(stop_time_total - start_time_total);
-		// total_time = total_duration.count()/1e6;
-		// data << "Total Exploration Time: " << total_time << endl;
-		// data << "Total Computation Time: " << total_computation_time << endl;
-		// data << "Total Path Length: " << total_path_length << endl;
+		data.open("/home/zhefan/Desktop/AEP_data/maze/aeplanner/maze_stats5.txt");
+		auto stop_time_total = high_resolution_clock::now();
+		auto total_duration = duration_cast<microseconds>(stop_time_total - start_time_total);
+		total_time = total_duration.count()/1e6;
+		data << "Total Exploration Time: " << total_time << endl;
+		data << "Total Computation Time: " << total_computation_time << endl;
+		data << "Total Path Length: " << total_path_length << endl;
 		ros::spinOnce();
 		loop_rate.sleep();
 	}
